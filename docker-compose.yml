@@ -1,0 +1,68 @@
+version: '3.7'
+services:
+  http_server:
+    hostname: http_server
+    image: your-image-name:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=oap:11800
+      - SW_AGENT_NAME=http_server
+      - SW_AGENT_INSTANCE_NAME=http_server-1
+      - SW_AGENT_PROFILE_ACTIVE=True
+    depends_on:
+      - oap
+    restart: always
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.4.2
+    ports:
+      - "9200:9200"
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - ./data/elasticsearch/data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:7.4.2
+    ports:
+      - "5601:5601"
+    environment:
+      SERVER_NAME: kibana
+      SERVER_HOST: "0.0.0.0"
+      ELASTICSEARCH_HOSTS: "http://elasticsearch:9200"
+    depends_on:
+      - elasticsearch
+
+  oap:
+    image: apache/skywalking-oap-server
+    depends_on:
+      - elasticsearch
+    ports:
+      - "11800:11800"
+      - "12800:12800"
+    environment:
+      SW_STORAGE: elasticsearch
+      SW_STORAGE_ES_CLUSTER_NODES: elasticsearch:9200
+      SW_HEALTH_CHECKER: default
+      SW_TELEMETRY: prometheus
+      JAVA_OPTS: >
+        -Xms2048m -Xmx2048m
+        -Dlog4j2.configurationFile=/skywalking/config/log4j2.xml
+        -Droot.log.level=DEBUG
+
+  ui:
+    image: apache/skywalking-ui
+    depends_on:
+      - oap
+    ports:
+      - "38080:8080"
+    environment:
+      SW_OAP_ADDRESS: http://oap:12800
